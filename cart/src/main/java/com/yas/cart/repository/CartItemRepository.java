@@ -41,4 +41,6 @@ public interface CartItemRepository extends JpaRepository<CartItem, CartItemId> 
     List<CartItem> findByCustomerIdAndProductIdIn(String customerId, List<Long> productIds);
 
     void deleteByCustomerIdAndProductId(String customerId, Long productId);
+
+    // Luong test CI for merge
 }
