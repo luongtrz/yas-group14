@@ -1,52 +1,266 @@
 pipeline {
-    agent any 
+    agent any
+
+    tools {
+        maven 'Maven'
+        jdk 'JDK25'
+    }
 
     environment {
-        // Ensuring the environment uses the correct Java version for YAS
-        JAVA_HOME = '/opt/java/openjdk'
         MAVEN_OPTS = '-Dmaven.test.failure.ignore=false'
+        SONARQUBE_ENV = 'SonarQube' // SonarQube server name configured in Jenkins
+    }
+
+    options {
+        timestamps()
+        timeout(time: 60, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
     stages {
-        stage('Initial Cleanup') {
+        // ============================================================
+        // PHASE 1: DETECT CHANGES (monorepo - only build what changed)
+        // ============================================================
+        stage('Detect Changes') {
             steps {
-                echo 'Cleaning up workspace...'
-                deleteDir()
-            }
-        }
-
-        stage('Checkout Source') {
-            steps {
-                echo 'Cloning repository from GitHub...'
-                checkout scm
-            }
-        }
-
-        stage('CI: Media Service') {
-            when {
-                changeset "services/media-service/**"
-            }
-            steps {
-                echo 'Building and testing Media Service...'
-                sh './mvnw clean test -pl services/media-service -am'
-            }
-        }
-
-        stage('CI: Product Service') {
-            when {
-                changeset "services/product-service/**"
-            }
-            steps {
-                echo 'Building and testing Product Service...'
-                sh './mvnw clean test -pl services/product-service -am'
-            }
-        }
-
-        stage('Static Analysis (SonarQube)') {
-            steps {
-                echo 'Running SonarQube quality gate...'
                 script {
-                    echo "Quality Gate check skipped until SonarQube server is linked."
+                    // Services that have unit tests and can be built
+                    def allServices = [
+                        'media', 'product', 'cart', 'order', 'customer',
+                        'inventory', 'location', 'payment', 'payment-paypal',
+                        'promotion', 'rating', 'search', 'tax', 'webhook',
+                        'recommendation'
+                    ]
+
+                    // Detect which services have changed files
+                    changedServices = []
+                    commonChanged = false
+
+                    if (env.CHANGE_TARGET) {
+                        // PR build: compare against target branch
+                        sh "git fetch origin +refs/heads/${env.CHANGE_TARGET}:refs/remotes/origin/${env.CHANGE_TARGET} --no-tags"
+                        def changes = sh(
+                            script: "git diff --name-only origin/${env.CHANGE_TARGET}...HEAD",
+                            returnStdout: true
+                        ).trim()
+
+                        if (changes.contains('common-library/') || changes.contains('pom.xml')) {
+                            commonChanged = true
+                        }
+
+                        for (svc in allServices) {
+                            if (changes.contains("${svc}/") || commonChanged) {
+                                changedServices.add(svc)
+                            }
+                        }
+                    } else {
+                        // Branch build: compare against previous commit
+                        def changes = sh(
+                            script: "git diff --name-only HEAD~1 HEAD || echo ''",
+                            returnStdout: true
+                        ).trim()
+
+                        if (changes.contains('common-library/') || changes.contains('pom.xml')) {
+                            commonChanged = true
+                        }
+
+                        for (svc in allServices) {
+                            if (changes.contains("${svc}/") || commonChanged) {
+                                changedServices.add(svc)
+                            }
+                        }
+                    }
+
+                    if (changedServices.isEmpty()) {
+                        echo "No service changes detected. Skipping build."
+                    } else {
+                        echo "Changed services: ${changedServices.join(', ')}"
+                    }
+                }
+            }
+        }
+
+        // ============================================================
+        // PHASE 2: BUILD - Compile all changed services
+        // ============================================================
+        stage('Build') {
+            when {
+                expression { return !changedServices.isEmpty() }
+            }
+            steps {
+                script {
+                    def modules = changedServices.join(',')
+                    sh "./mvnw clean compile -pl ${modules} -am -DskipTests"
+                }
+            }
+        }
+
+        // ============================================================
+        // PHASE 3: TEST - Run unit tests + generate coverage
+        // ============================================================
+        stage('Test') {
+            when {
+                expression { return !changedServices.isEmpty() }
+            }
+            steps {
+                script {
+                    def modules = changedServices.join(',')
+                    // Run tests + JaCoCo coverage report (verify phase triggers jacoco:report)
+                    sh "./mvnw verify -pl ${modules} -am"
+                }
+            }
+            post {
+                always {
+                    // Upload JUnit test results for each changed service
+                    junit(
+                        testResults: '**/target/surefire-reports/TEST-*.xml, **/target/failsafe-reports/TEST-*.xml',
+                        allowEmptyResults: true
+                    )
+
+                    // Publish JaCoCo coverage report
+                    jacoco(
+                        execPattern: '**/target/jacoco.exec',
+                        classPattern: '**/target/classes',
+                        sourcePattern: '**/src/main/java',
+                        exclusionPattern: '**/config/**,**/exception/**,**/constants/**,**/*Application.*',
+                        minimumLineCoverage: '70',
+                        minimumBranchCoverage: '50',
+                        changeBuildStatus: true
+                    )
+                }
+            }
+        }
+
+        // ============================================================
+        // PHASE 4: CODE QUALITY - Checkstyle + SonarQube
+        // ============================================================
+        stage('Code Quality') {
+            when {
+                expression { return !changedServices.isEmpty() }
+            }
+            parallel {
+                stage('Checkstyle') {
+                    steps {
+                        script {
+                            def modules = changedServices.join(',')
+                            sh "./mvnw checkstyle:checkstyle -pl ${modules} -am"
+                        }
+                    }
+                    post {
+                        always {
+                            recordIssues(
+                                tools: [checkStyle(pattern: '**/checkstyle-result.xml')],
+                                qualityGates: [[threshold: 1, type: 'TOTAL_HIGH', unstable: true]]
+                            )
+                        }
+                    }
+                }
+
+                stage('SonarQube Analysis') {
+                    steps {
+                        script {
+                            def modules = changedServices.join(',')
+                            withSonarQubeEnv("${SONARQUBE_ENV}") {
+                                sh "./mvnw org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -pl ${modules} -am"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // SonarQube Quality Gate - wait for result
+        stage('Quality Gate') {
+            when {
+                expression { return !changedServices.isEmpty() }
+            }
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        // ============================================================
+        // PHASE 5: SECURITY SCAN - Gitleaks + Snyk + OWASP
+        // ============================================================
+        stage('Security Scan') {
+            when {
+                expression { return !changedServices.isEmpty() }
+            }
+            parallel {
+                stage('Gitleaks') {
+                    steps {
+                        sh '''
+                            docker pull zricethezav/gitleaks:v8.18.4
+                            docker run --rm -v $(pwd):/work -w /work \
+                                zricethezav/gitleaks:v8.18.4 \
+                                detect --source="." --verbose --no-git \
+                                --report-format=json --report-path=/work/gitleaks-report.json || true
+                        '''
+                    }
+                    post {
+                        always {
+                            archiveArtifacts(
+                                artifacts: 'gitleaks-report.json',
+                                allowEmptyArchive: true
+                            )
+                        }
+                    }
+                }
+
+                stage('Snyk Security Scan') {
+                    steps {
+                        script {
+                            def modules = changedServices.join(',')
+                            withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
+                                sh """
+                                    docker run --rm \
+                                        -e SNYK_TOKEN=\${SNYK_TOKEN} \
+                                        -v \$(pwd):/project \
+                                        -w /project \
+                                        snyk/snyk:maven \
+                                        snyk test --all-sub-projects \
+                                        --severity-threshold=high || true
+                                """
+                                sh """
+                                    docker run --rm \
+                                        -e SNYK_TOKEN=\${SNYK_TOKEN} \
+                                        -v \$(pwd):/project \
+                                        -w /project \
+                                        snyk/snyk:maven \
+                                        snyk test --all-sub-projects \
+                                        --severity-threshold=high \
+                                        --json > snyk-report.json || true
+                                """
+                            }
+                        }
+                    }
+                    post {
+                        always {
+                            archiveArtifacts(
+                                artifacts: 'snyk-report.json',
+                                allowEmptyArchive: true
+                            )
+                        }
+                    }
+                }
+
+                stage('OWASP Dependency Check') {
+                    steps {
+                        script {
+                            def modules = changedServices.join(',')
+                            sh "./mvnw org.owasp:dependency-check-maven:check -pl ${modules} -am -DfailBuildOnCVSS=9"
+                        }
+                    }
+                    post {
+                        always {
+                            dependencyCheckPublisher(
+                                pattern: '**/dependency-check-report.xml',
+                                failedTotalCritical: 1
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -54,13 +268,16 @@ pipeline {
 
     post {
         always {
-            echo 'Pipeline execution finished. Syncing status with GitHub...'
+            echo 'Pipeline execution finished.'
         }
         success {
-            echo 'Build successful! Pull Request is now eligible for merge.'
+            echo "Build successful! Changed services: ${changedServices?.join(', ') ?: 'none'}"
         }
         failure {
-            echo 'Build failed. Lượng, please check the console output for errors.'
+            echo 'Build failed. Please check the console output for errors.'
+        }
+        cleanup {
+            cleanWs()
         }
     }
 }

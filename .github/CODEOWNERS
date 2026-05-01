@@ -1,0 +1,37 @@
+# CODEOWNERS - Yêu cầu review cho mỗi Pull Request
+# Đảm bảo ít nhất 2 thành viên review trước khi merge vào main
+
+# Mặc định: tất cả thay đổi cần review từ team
+* @luongtrz
+
+# Java services
+/media/**        @luongtrz
+/product/**      @luongtrz
+/cart/**          @luongtrz
+/order/**         @luongtrz
+/customer/**      @luongtrz
+/inventory/**     @luongtrz
+/location/**      @luongtrz
+/payment/**       @luongtrz
+/payment-paypal/**@luongtrz
+/promotion/**     @luongtrz
+/rating/**        @luongtrz
+/search/**        @luongtrz
+/tax/**           @luongtrz
+/webhook/**       @luongtrz
+/recommendation/**@luongtrz
+/delivery/**      @luongtrz
+/common-library/**@luongtrz
+
+# Frontend
+/storefront/**    @luongtrz
+/backoffice/**    @luongtrz
+
+# CI/CD
+/Jenkinsfile      @luongtrz
+/.github/**       @luongtrz
+
+# Infrastructure
+/docker-compose*.yml @luongtrz
+/k8s/**              @luongtrz
+/docker/**           @luongtrz
