@@ -38,7 +38,7 @@ pipeline {
 
                     if (env.CHANGE_TARGET) {
                         // PR build: compare against target branch
-                        sh "git fetch origin ${env.CHANGE_TARGET} --no-tags"
+                        sh "git fetch origin +refs/heads/${env.CHANGE_TARGET}:refs/remotes/origin/${env.CHANGE_TARGET} --no-tags"
                         def changes = sh(
                             script: "git diff --name-only origin/${env.CHANGE_TARGET}...HEAD",
                             returnStdout: true
