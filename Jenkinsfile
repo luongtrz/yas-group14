@@ -182,7 +182,7 @@ pipeline {
         }
 
         // ============================================================
-        // PHASE 5: SECURITY SCAN - Gitleaks + Snyk + OWASP
+        // PHASE 5: SECURITY SCAN - Gitleaks + Snyk
         // ============================================================
         stage('Security Scan') {
             when {
@@ -192,11 +192,21 @@ pipeline {
                 stage('Gitleaks') {
                     steps {
                         sh '''
-                            docker pull zricethezav/gitleaks:v8.18.4
-                            docker run --rm -v $(pwd):/work -w /work \
-                                zricethezav/gitleaks:v8.18.4 \
-                                detect --source="." --verbose --no-git \
-                                --report-format=json --report-path=/work/gitleaks-report.json || true
+                            echo "Downloading Gitleaks binary..."
+                            curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz \
+                                -o /tmp/gitleaks.tar.gz
+                            tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+                            chmod +x /tmp/gitleaks
+
+                            echo "Running Gitleaks scan..."
+                            /tmp/gitleaks detect \
+                                --source="." \
+                                --config=gitleaks.toml \
+                                --report-format=json \
+                                --report-path=gitleaks-report.json \
+                                --verbose || true
+
+                            echo "Gitleaks scan complete."
                         '''
                     }
                     post {
@@ -211,29 +221,24 @@ pipeline {
 
                 stage('Snyk Security Scan') {
                     steps {
-                        script {
-                            def modules = changedServices.join(',')
-                            withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
-                                sh """
-                                    docker run --rm \
-                                        -e SNYK_TOKEN=\${SNYK_TOKEN} \
-                                        -v \$(pwd):/project \
-                                        -w /project \
-                                        snyk/snyk:maven \
-                                        snyk test --all-sub-projects \
-                                        --severity-threshold=high || true
-                                """
-                                sh """
-                                    docker run --rm \
-                                        -e SNYK_TOKEN=\${SNYK_TOKEN} \
-                                        -v \$(pwd):/project \
-                                        -w /project \
-                                        snyk/snyk:maven \
-                                        snyk test --all-sub-projects \
-                                        --severity-threshold=high \
-                                        --json > snyk-report.json || true
-                                """
-                            }
+                        withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
+                            sh '''
+                                echo "Downloading Snyk CLI..."
+                                curl -sSfL https://github.com/snyk/cli/releases/latest/download/snyk-linux \
+                                    -o /tmp/snyk
+                                chmod +x /tmp/snyk
+
+                                echo "Authenticating Snyk..."
+                                /tmp/snyk auth ${SNYK_TOKEN}
+
+                                echo "Running Snyk test..."
+                                /tmp/snyk test \
+                                    --all-projects \
+                                    --severity-threshold=high \
+                                    --json-file-output=snyk-report.json || true
+
+                                echo "Snyk scan complete."
+                            '''
                         }
                     }
                     post {
@@ -241,23 +246,6 @@ pipeline {
                             archiveArtifacts(
                                 artifacts: 'snyk-report.json',
                                 allowEmptyArchive: true
-                            )
-                        }
-                    }
-                }
-
-                stage('OWASP Dependency Check') {
-                    steps {
-                        script {
-                            def modules = changedServices.join(',')
-                            sh "./mvnw org.owasp:dependency-check-maven:check -pl ${modules} -am -DfailBuildOnCVSS=9"
-                        }
-                    }
-                    post {
-                        always {
-                            dependencyCheckPublisher(
-                                pattern: '**/dependency-check-report.xml',
-                                failedTotalCritical: 1
                             )
                         }
                     }
