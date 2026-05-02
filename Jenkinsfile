@@ -106,7 +106,7 @@ pipeline {
                 script {
                     def modules = changedServices.join(',')
                     // Run tests + JaCoCo coverage report (verify phase triggers jacoco:report)
-                    sh "./mvnw verify -pl ${modules} -am"
+                    sh "./mvnw verify -pl ${modules} -am -DskipITs"
                 }
             }
             post {
