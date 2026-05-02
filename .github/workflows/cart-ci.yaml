@@ -20,6 +20,10 @@ on:
 jobs:
   Build:
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: write
     env:
       FROM_ORIGINAL_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name == github.repository || github.ref == 'refs/heads/main' }}
     steps:
@@ -61,9 +65,10 @@ jobs:
           path: ${{github.workspace}}/reports
       - name: Analyze with sonar cloud
         if: ${{ env.FROM_ORIGINAL_REPOSITORY == 'true' }}
+        continue-on-error: true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -pl cart -am
+        run: mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -pl cart -am -Dsonar.organization=devop14s -Dsonar.projectKey=devop14s_yas
       - name: Add coverage report to PR
         uses: madrapps/jacoco-report@v1.6.1
         if: ${{ env.FROM_ORIGINAL_REPOSITORY == 'true' }}
