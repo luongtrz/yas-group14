@@ -136,7 +136,7 @@ class UserAddressServiceTest {
         @Test
         void createAddress_whenFirstAddress_setsAsActive() {
             AddressPostVm addressPostVm = mock(AddressPostVm.class);
-            AddressVm addressVm = new AddressVm(ADDRESS_ID);
+            AddressVm addressVm = AddressVm.builder().id(ADDRESS_ID).build();
             UserAddress savedAddress = UserAddress.builder()
                     .userId(USER_ID).addressId(ADDRESS_ID).isActive(true).build();
 
@@ -152,7 +152,7 @@ class UserAddressServiceTest {
         @Test
         void createAddress_whenNotFirstAddress_setsAsInactive() {
             AddressPostVm addressPostVm = mock(AddressPostVm.class);
-            AddressVm addressVm = new AddressVm(ADDRESS_ID);
+            AddressVm addressVm = AddressVm.builder().id(ADDRESS_ID).build();
             UserAddress existing = UserAddress.builder()
                     .userId(USER_ID).addressId(1L).isActive(true).build();
             UserAddress savedAddress = UserAddress.builder()
