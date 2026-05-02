@@ -20,22 +20,25 @@ class ProductServiceAdditionalTest {
     private ServiceUrlConfig serviceUrlConfig;
     private ProductService productService;
     private RestClient.RequestHeadersUriSpec<?> requestHeadersUriSpec;
+    private RestClient.RequestHeadersSpec<?> requestHeadersSpec;
     private RestClient.ResponseSpec responseSpec;
 
     private static final String PRODUCT_URL = "http://api.yas.local/product";
 
+    @SuppressWarnings("unchecked")
     @BeforeEach
     void setUp() {
         restClient = Mockito.mock(RestClient.class);
         serviceUrlConfig = Mockito.mock(ServiceUrlConfig.class);
         productService = new ProductService(restClient, serviceUrlConfig);
         requestHeadersUriSpec = Mockito.mock(RestClient.RequestHeadersUriSpec.class);
+        requestHeadersSpec = Mockito.mock(RestClient.RequestHeadersSpec.class);
         responseSpec = Mockito.mock(RestClient.ResponseSpec.class);
 
         when(serviceUrlConfig.product()).thenReturn(PRODUCT_URL);
         when(restClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(Mockito.any())).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.retrieve()).thenReturn(responseSpec);
+        when(requestHeadersUriSpec.uri(Mockito.any(java.net.URI.class))).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
     }
 
     @Test
