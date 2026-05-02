@@ -161,7 +161,7 @@ pipeline {
                         script {
                             def modules = changedServices.join(',')
                             withSonarQubeEnv("${SONARQUBE_ENV}") {
-                                sh "./mvnw org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -pl ${modules} -am"
+                                sh "./mvnw org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -pl ${modules} -am -Dsonar.organization=devop14s"
                             }
                         }
                     }
