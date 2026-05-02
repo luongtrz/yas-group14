@@ -190,7 +190,7 @@ class OrderServiceTest {
             Order order = buildOrder(ORDER_ID, OrderStatus.PENDING);
             PaymentOrderStatusVm statusVm = PaymentOrderStatusVm.builder()
                     .orderId(ORDER_ID)
-                    .paymentId("pay-001")
+                    .paymentId(1L)
                     .paymentStatus(PaymentStatus.COMPLETED.name())
                     .build();
 
@@ -200,7 +200,7 @@ class OrderServiceTest {
             PaymentOrderStatusVm result = orderService.updateOrderPaymentStatus(statusVm);
 
             assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.PAID);
-            assertThat(result.paymentId()).isEqualTo("pay-001");
+            assertThat(result.paymentId()).isEqualTo(1L);
         }
 
         @Test
@@ -208,7 +208,7 @@ class OrderServiceTest {
             Order order = buildOrder(ORDER_ID, OrderStatus.PENDING);
             PaymentOrderStatusVm statusVm = PaymentOrderStatusVm.builder()
                     .orderId(ORDER_ID)
-                    .paymentId("pay-002")
+                    .paymentId(2L)
                     .paymentStatus(PaymentStatus.PENDING.name())
                     .build();
 
