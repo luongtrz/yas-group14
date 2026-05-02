@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.yas.commonlibrary.exception.NotFoundException;
 import com.yas.order.mapper.OrderMapper;
 import com.yas.order.model.Order;
+import com.yas.order.model.OrderAddress;
 import com.yas.order.model.OrderItem;
 import com.yas.order.model.enumeration.OrderStatus;
 import com.yas.order.model.enumeration.PaymentStatus;
@@ -56,11 +57,14 @@ class OrderServiceTest {
     private static final String CHECKOUT_ID = "checkout-abc-123";
 
     private Order buildOrder(Long id, OrderStatus status) {
+        OrderAddress address = OrderAddress.builder().id(1L).contactName("Test").phone("000").build();
         return Order.builder()
                 .id(id)
                 .orderStatus(status)
                 .paymentStatus(PaymentStatus.PENDING)
                 .checkoutId(CHECKOUT_ID)
+                .shippingAddressId(address)
+                .billingAddressId(address)
                 .build();
     }
 
