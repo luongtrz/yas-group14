@@ -150,20 +150,8 @@ pipeline {
                             sh "./mvnw checkstyle:checkstyle -pl ${modules} -am"
                         }
                     }
-                    post {
-                        always {
-                            script {
-                                try {
-                                    recordIssues(
-                                        tools: [checkStyle(pattern: '**/checkstyle-result.xml')],
-                                        qualityGates: [[threshold: 1, type: 'TOTAL_HIGH', unstable: true]]
-                                    )
-                                } catch (Exception e) {
-                                    echo "Checkstyle issue recording skipped: ${e.message}"
-                                }
-                            }
-                        }
-                    }
+                    // recordIssues(checkStyle) omitted: warnings-ng plugin does not
+                    // register the checkStyle symbol in this Jenkins version
                 }
 
                 stage('SonarQube Analysis') {
